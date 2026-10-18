@@ -1,0 +1,229 @@
+# =====================================================================
+#  ニュースまとめページの設定ファイル
+#  ・「#」から行末まではメモ（コメント）です。動作には影響しません。
+#  ・ここに書いた内容は GitHub 上で公開されます。
+#    人に見られたくない NG ワードは、ページ右上の「設定」から登録してください
+#    （その端末のブラウザ内にだけ保存されます）。
+# =====================================================================
+
+[settings]
+max_age_hours = 36          # これより古い記事は表示しない（時間）
+max_items_per_section = 30  # 1ジャンルあたり最大何件まで保存するか
+show_per_section = 8        # トピックスの各タブに表示する件数（残りは「もっと見る」）
+hot_count = 8               # 「主要」タブに全ジャンルから選ぶ話題の件数
+similarity = 0.55           # 重複記事とみなす見出しの類似度（0〜1、大きいほど厳しい）
+
+# ---------------------------------------------------------------------
+#  フィルタ（全端末共通）
+#  ng_sources : 表示しない媒体名（部分一致）。「.」を含むとドメインとして扱います
+#  ng_words   : 見出しにこの語を含む記事は表示しない（部分一致）
+#               「re:」で始めると正規表現として扱います
+# ---------------------------------------------------------------------
+[filter]
+ng_sources = [
+  # コタツ記事・タブロイド・ゴシップ系
+  "J-CASTニュース", "j-cast.com",
+  "まいどなニュース", "ENCOUNT", "Sirabee", "ねとらぼ",
+  "日刊ゲンダイ", "東スポ", "夕刊フジ", "zakzak",
+  "女性自身", "週刊女性", "女性セブン", "NEWSポストセブン",
+  "SmartFLASH", "FRIDAY", "日刊SPA", "アサ芸",
+  "デイリー新潮", "文春オンライン", "ABEMA TIMES",
+  "dメニューニュース", "zakⅡ",
+  # Googleニュース経由の Yahoo!ニュース配信記事（生活系・コタツ系が多いため）。
+  # Yahoo! 編集部が選んだ記事は「Yahoo!トピックス」から別途取得しています。
+  "Yahoo!ニュース",
+]
+
+ng_words = [
+  # 煽り型の見出し表現
+  "衝撃", "激怒", "炎上", "物議", "波紋", "騒然", "ざわつく", "ざわつき",
+  "まさかの", "絶句", "唖然", "批判殺到", "猛批判", "痛烈", "苦言", "ブチギレ",
+  "号泣", "悲痛", "赤裸々", "激白", "暴露", "意味深", "匂わせ", "ヤバい",
+  "ネットの声", "ネット民", "SNSで話題", "なぜ？", "とは？", "の正体",
+  "re:[!！]{2,}",            # 「!!」の連続
+  "re:【(困惑|悲報|朗報|驚愕|衝撃|閲覧注意)】",
+  # 芸能ゴシップ・スキャンダル
+  "不倫", "熱愛", "交際報道", "破局", "密会", "略奪", "二股", "スキャンダル",
+  "離婚危機", "電撃婚", "文春砲",
+  # 事件・事故の残酷な詳細
+  "惨殺", "めった刺し", "バラバラ", "切断", "遺体損壊", "虐待死",
+  "性的暴行", "わいせつ", "猟奇", "首を絞め", "遺棄", "血だらけ", "血まみれ",
+]
+
+# ---------------------------------------------------------------------
+#  ジャンルと取得元フィード
+#  ・ジャンルの並び順がそのままページの並び順になります。
+#  ・同じ出来事が複数ジャンルに出る場合は、上にあるジャンルに表示されます。
+#  ・source       : 媒体名（Googleニュースは記事ごとの媒体名が自動で入ります）
+#  ・priority     : 重複記事をまとめたとき、どの媒体の見出しを代表にするか（小さいほど優先）
+#  ・boost        : 並び順の加点。編集部が選んだ「トピックス」等を上位に出すため（既定 0）
+#  ・short_title  : true にすると、同じ話題ではこの媒体の短い見出しを一覧に使う
+#  ・only_sources : 指定すると、その媒体の記事だけを採用（Googleニュースのピックアップ用）
+# ---------------------------------------------------------------------
+[[sections]]
+id = "top"
+name = "主要"
+  [[sections.feeds]]
+  source = "NHK"
+  url = "https://news.web.nhk/n-data/conf/na/rss/cat0.xml"
+  priority = 1
+  boost = 2
+  [[sections.feeds]]
+  source = "Yahoo!トピックス"
+  url = "https://news.yahoo.co.jp/rss/topics/top-picks.xml"
+  priority = 8
+  boost = 3
+  short_title = true
+  [[sections.feeds]]
+  source = "Googleニュース"
+  url = "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja"
+  priority = 5
+
+[[sections]]
+id = "domestic"
+name = "国内"
+  [[sections.feeds]]
+  source = "NHK"
+  url = "https://news.web.nhk/n-data/conf/na/rss/cat1.xml"   # 社会
+  priority = 1
+  boost = 2
+  [[sections.feeds]]
+  source = "NHK"
+  url = "https://news.web.nhk/n-data/conf/na/rss/cat4.xml"   # 政治
+  priority = 1
+  boost = 2
+  [[sections.feeds]]
+  source = "Yahoo!トピックス"
+  url = "https://news.yahoo.co.jp/rss/topics/domestic.xml"
+  priority = 8
+  boost = 3
+  short_title = true
+  [[sections.feeds]]
+  source = "朝日新聞"
+  url = "https://www.asahi.com/rss/asahi/newsheadlines.rdf"
+  priority = 2
+  [[sections.feeds]]
+  source = "毎日新聞"
+  url = "https://mainichi.jp/rss/etc/mainichi-flash.rss"
+  priority = 2
+  [[sections.feeds]]
+  source = "Googleニュース"
+  url = "https://news.google.com/rss/headlines/section/topic/NATION?hl=ja&gl=JP&ceid=JP:ja"
+  priority = 5
+
+[[sections]]
+id = "world"
+name = "国際"
+  [[sections.feeds]]
+  source = "NHK"
+  url = "https://news.web.nhk/n-data/conf/na/rss/cat6.xml"
+  priority = 1
+  boost = 2
+  [[sections.feeds]]
+  source = "Yahoo!トピックス"
+  url = "https://news.yahoo.co.jp/rss/topics/world.xml"
+  priority = 8
+  boost = 3
+  short_title = true
+  [[sections.feeds]]
+  source = "BBCニュース日本語"
+  url = "https://feeds.bbci.co.uk/japanese/rss.xml"
+  priority = 2
+  [[sections.feeds]]
+  source = "CNN.co.jp"
+  url = "https://feeds.cnn.co.jp/rss/cnn/cnn.rdf"
+  priority = 3
+  [[sections.feeds]]
+  source = "Googleニュース"
+  url = "https://news.google.com/rss/headlines/section/topic/WORLD?hl=ja&gl=JP&ceid=JP:ja"
+  priority = 5
+
+[[sections]]
+id = "business"
+name = "経済"
+  [[sections.feeds]]
+  source = "NHK"
+  url = "https://news.web.nhk/n-data/conf/na/rss/cat5.xml"
+  priority = 1
+  boost = 2
+  [[sections.feeds]]
+  source = "Yahoo!トピックス"
+  url = "https://news.yahoo.co.jp/rss/topics/business.xml"
+  priority = 8
+  boost = 3
+  short_title = true
+  [[sections.feeds]]
+  source = "Googleニュース"
+  url = "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ja&gl=JP&ceid=JP:ja"
+  priority = 5
+
+[[sections]]
+id = "tech"
+name = "IT・科学"
+  [[sections.feeds]]
+  source = "NHK"
+  url = "https://news.web.nhk/n-data/conf/na/rss/cat3.xml"
+  priority = 1
+  boost = 2
+  [[sections.feeds]]
+  source = "ITmedia"
+  url = "https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml"
+  priority = 2
+  [[sections.feeds]]
+  source = "Yahoo!トピックス"
+  url = "https://news.yahoo.co.jp/rss/topics/it.xml"
+  priority = 8
+  boost = 3
+  short_title = true
+  [[sections.feeds]]
+  source = "Yahoo!トピックス"
+  url = "https://news.yahoo.co.jp/rss/topics/science.xml"
+  priority = 8
+  boost = 3
+  short_title = true
+  [[sections.feeds]]
+  source = "Googleニュース"
+  url = "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=ja&gl=JP&ceid=JP:ja"
+  priority = 5
+  [[sections.feeds]]
+  source = "Googleニュース"
+  url = "https://news.google.com/rss/headlines/section/topic/SCIENCE?hl=ja&gl=JP&ceid=JP:ja"
+  priority = 5
+
+[[sections]]
+id = "sports"
+name = "スポーツ"
+  [[sections.feeds]]
+  source = "NHK"
+  url = "https://news.web.nhk/n-data/conf/na/rss/cat7.xml"
+  priority = 1
+  boost = 2
+  [[sections.feeds]]
+  source = "Yahoo!トピックス"
+  url = "https://news.yahoo.co.jp/rss/topics/sports.xml"
+  priority = 8
+  boost = 3
+  short_title = true
+  [[sections.feeds]]
+  source = "Googleニュース"
+  url = "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=ja&gl=JP&ceid=JP:ja"
+  priority = 5
+
+[[sections]]
+id = "entertainment"
+name = "エンタメ・文化"
+  [[sections.feeds]]
+  source = "NHK"
+  url = "https://news.web.nhk/n-data/conf/na/rss/cat2.xml"
+  priority = 1
+  boost = 2
+  [[sections.feeds]]
+  source = "Yahoo!トピックス"
+  url = "https://news.yahoo.co.jp/rss/topics/entertainment.xml"
+  priority = 8
+  boost = 3
+  short_title = true
+  [[sections.feeds]]
+  source = "Googleニュース"
+  url = "https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=ja&gl=JP&ceid=JP:ja"
+  priority = 5

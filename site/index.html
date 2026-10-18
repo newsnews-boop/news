@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16181b" media="(prefers-color-scheme: dark)">
+<title>ニュース一覧</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f4a6b'/%3E%3Cpath d='M8 10h16M8 16h16M8 22h10' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ニュース">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<!-- style.css / app.js を変更したら ?v= の数字を1つ増やす（ブラウザに古い版を使わせないため） -->
+<link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-inner">
+    <h1>ニュース一覧</h1>
+    <span class="spacer"></span>
+    <button id="reload" class="icon-btn" type="button" aria-label="再読み込み" title="再読み込み">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+    </button>
+    <button id="open-settings" class="icon-btn" type="button" aria-label="設定" title="設定">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="main" class="page">
+  <p class="status">読み込み中…</p>
+</main>
+
+<footer class="footer">
+  <p id="footer-note"></p>
+</footer>
+
+<div id="toast" class="toast" role="status" hidden></div>
+
+<dialog id="settings" class="settings">
+  <form method="dialog" class="settings-form">
+    <h2>設定 <small>（この端末だけに保存）</small></h2>
+
+    <label class="field">
+      <span>非表示にするキーワード（1行に1つ、見出しに含むと非表示）</span>
+      <textarea id="ng-words" rows="5" placeholder="例）&#10;占い&#10;ランキング"></textarea>
+    </label>
+
+    <label class="field">
+      <span>非表示にする媒体（1行に1つ、媒体名の一部でOK）</span>
+      <textarea id="ng-sources" rows="5" placeholder="例）&#10;オリコン"></textarea>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" id="hide-read">
+      <span>既読の記事を隠す</span>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" id="thumbs">
+      <span>一覧に写真を表示（オフにすると通信量を抑えられます）</span>
+    </label>
+
+    <details class="sync">
+      <summary>スマホとPCで設定を揃える</summary>
+      <p>片方の端末で「書き出し」を押してコピーされた文字列を、もう片方の端末で「読み込み」に貼り付けてください。</p>
+      <div class="row">
+        <button type="button" id="export">書き出し（コピー）</button>
+        <button type="button" id="import">読み込み</button>
+      </div>
+    </details>
+
+    <details class="sync">
+      <summary>取得状況</summary>
+      <ul id="feed-status" class="feed-status"></ul>
+    </details>
+
+    <div class="row actions">
+      <button type="button" id="clear-read" class="secondary">既読・消した記事をリセット</button>
+      <span class="spacer"></span>
+      <button value="cancel" class="secondary">閉じる</button>
+      <button value="save" id="save" class="primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js?v=5"></script>
+</body>
+</html>
