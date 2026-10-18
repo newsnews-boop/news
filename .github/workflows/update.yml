@@ -1,0 +1,44 @@
+# 30分ごとにRSSを取得してページを更新し、GitHub Pages に公開する
+name: ニュース更新
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"   # 毎時7分・37分（混雑する0分を避ける）。GitHub側の都合で数分〜数十分遅れることがあります
+  push:
+    branches: [main]         # 設定やページを変更したときもすぐ反映
+  workflow_dispatch:         # Actions 画面から手動実行
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # 記事の紹介文・元URLの調査結果を次回に引き継ぐ（同じ記事に何度もアクセスしないため）
+      - uses: actions/cache@v4
+        with:
+          path: cache
+          key: enrich-${{ github.run_id }}
+          restore-keys: enrich-
+      - name: RSS取得
+        run: python scripts/build_news.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
