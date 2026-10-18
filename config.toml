@@ -58,6 +58,8 @@ ng_words = [
 #  ・priority     : 重複記事をまとめたとき、どの媒体の見出しを代表にするか（小さいほど優先）
 #  ・boost        : 並び順の加点。編集部が選んだ「トピックス」等を上位に出すため（既定 0）
 #  ・short_title  : true にすると、同じ話題ではこの媒体の短い見出しを一覧に使う
+#  ・max_age_hours: このフィードだけ表示期間を変える（時間）
+#  ・always_show  : true にすると、件数の上限に関係なく必ず載せる（件数の少ない情報源向け）
 #  ・only_sources : 指定すると、その媒体の記事だけを採用（Googleニュースのピックアップ用）
 # ---------------------------------------------------------------------
 [[sections]]
@@ -106,6 +108,12 @@ name = "国内"
   source = "毎日新聞"
   url = "https://mainichi.jp/rss/etc/mainichi-flash.rss"
   priority = 2
+  [[sections.feeds]]
+  source = "首相官邸"   # 報道を通さない政府の一次発表
+  url = "https://www.kantei.go.jp/index-jnews.rdf"
+  priority = 3
+  always_show = true    # 件数が少なく報道に押し出されやすいので、順位に関係なく載せる
+  max_age_hours = 72    # 発表は1日数件なので、表示期間を長めに
   [[sections.feeds]]
   source = "Googleニュース"
   url = "https://news.google.com/rss/headlines/section/topic/NATION?hl=ja&gl=JP&ceid=JP:ja"
@@ -227,3 +235,28 @@ name = "エンタメ・文化"
   source = "Googleニュース"
   url = "https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=ja&gl=JP&ceid=JP:ja"
   priority = 5
+
+# ---------------------------------------------------------------------
+#  ランキング（トピックスとニュース一覧の間に表示）
+#  ・type = "apple"   : Apple のランキング（登録不要）
+#  ・type = "rakuten" : 楽天ブックスの売上順。楽天ウェブサービスの アプリID と アクセスキー を
+#                       GitHub の Secrets に RAKUTEN_APP_ID / RAKUTEN_ACCESS_KEY として登録すると表示されます
+#    referer : 楽天のアプリ設定に登録した「WebサイトURL」と同じもの
+#    genre : 楽天ブックスのジャンルID（001 = 本 全体）
+#    exclude_genres : 除外するジャンルID（001001 = 漫画）
+# ---------------------------------------------------------------------
+[[rankings]]
+id = "music"
+name = "音楽"
+source = "Apple Music"
+type = "apple"
+url = "https://rss.marketingtools.apple.com/api/v2/jp/music/most-played/10/songs.json"
+
+[[rankings]]
+id = "books"
+name = "本"
+source = "楽天ブックス"
+type = "rakuten"
+genre = "001"
+exclude_genres = ["001001"]
+referer = "https://newsnews-boop.github.io/news/"

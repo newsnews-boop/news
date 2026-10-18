@@ -258,6 +258,35 @@ function renderTopics(counter) {
       renderTopicPhoto(shown.slice(0, showN))));
 }
 
+// ---------------------------------------------------------------- ランキング
+
+const RANKING_SHOWN = 5;
+const rankingsOpen = new Set();
+
+function renderRankings() {
+  const lists = (data.rankings || []).filter((r) => r.items.length);
+  if (!lists.length) return null;
+  return el("section", { class: "rankings", "aria-label": "ランキング" },
+    ...lists.map((r) => {
+      const open = rankingsOpen.has(r.id);
+      const items = open ? r.items : r.items.slice(0, RANKING_SHOWN);
+      return el("div", { class: "ranking" },
+        el("h2", { class: "ranking-head" }, `${r.name}ランキング`, el("small", {}, r.source)),
+        el("ol", { class: "ranking-list" }, ...items.map((x, n) =>
+          el("li", {},
+            el("a", { href: safeUrl(x.url), target: "_blank", rel: "noopener noreferrer" },
+              el("span", { class: "rank" }, String(n + 1)),
+              thumb(x.image, "ranking-img"),
+              el("span", { class: "ranking-text" },
+                el("span", { class: "ranking-title" }, x.title),
+                el("span", { class: "ranking-sub" }, x.sub)))))),
+        r.items.length > RANKING_SHOWN ? el("button", {
+          class: "show-more", type: "button",
+          onclick: () => { open ? rankingsOpen.delete(r.id) : rankingsOpen.add(r.id); render(); },
+        }, open ? "閉じる" : `${RANKING_SHOWN + 1}〜${r.items.length}位を見る`) : null);
+    }));
+}
+
 // ---------------------------------------------------------------- ニュース一覧（新しい順）
 
 function renderCard(c) {
@@ -317,7 +346,7 @@ function render() {
   const topics = renderTopics(counter);
   // 主要タブの話題は一覧に重ねて出さない
   const stream = renderStream({ hidden: 0 }, data.hot || []);
-  main.replaceChildren(topics, stream);
+  main.replaceChildren(...[topics, renderRankings(), stream].filter(Boolean));
   window.scrollTo(0, scrollY);
 
   const f = data.filtered || {};

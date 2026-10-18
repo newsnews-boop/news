@@ -176,6 +176,30 @@ button { font: inherit; color: inherit; }
   .topic-photo figcaption { padding-top: 0; }
 }
 
+/* ---------- ランキング ---------- */
+.rankings { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.ranking {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 16px 6px; min-width: 0;
+}
+.ranking-head { font-size: .95rem; margin: 0 0 6px; display: flex; align-items: baseline; gap: 8px; }
+.ranking-head small { color: var(--sub); font-weight: normal; font-size: .72rem; }
+.ranking-list { list-style: none; margin: 0; padding: 0; }
+.ranking-list li + li { border-top: 1px solid var(--line); }
+.ranking-list a {
+  display: flex; align-items: center; gap: 10px; padding: 7px 0;
+  color: var(--text); text-decoration: none;
+}
+.rank { flex: none; width: 1.4em; text-align: center; font-weight: 700; color: var(--sub); font-size: .9rem; }
+.ranking-list li:nth-child(-n+3) .rank { color: var(--accent); }
+.ranking-img { flex: none; width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: var(--chip); }
+.ranking-text { display: grid; min-width: 0; }
+.ranking-title, .ranking-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranking-title { font-size: .92rem; }
+.ranking-list a:hover .ranking-title { text-decoration: underline; }
+.ranking-sub { color: var(--sub); font-size: .75rem; }
+.ranking .show-more { padding-left: 0; }
+
 /* ---------- ニュース一覧（新しい順） ---------- */
 .stream-head {
   font-size: 1rem; margin: 0 0 10px; display: flex; align-items: baseline; gap: 8px;

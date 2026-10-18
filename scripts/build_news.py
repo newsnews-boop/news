@@ -9,6 +9,7 @@ import email.utils
 import hashlib
 import html
 import json
+import os
 import pathlib
 import re
 import sys
@@ -32,11 +33,11 @@ JST = dt.timezone(dt.timedelta(hours=9))
 
 # ---------------------------------------------------------------- 取得・解析
 
-def fetch(url):
+def fetch(url, headers=None):
     last_error = None
     for _ in range(2):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
             with urllib.request.urlopen(req, timeout=20) as res:
                 return res.read()
         except Exception as e:  # noqa: BLE001 - 失敗は呼び出し元で記録する
@@ -311,6 +312,57 @@ def enrich(items, cache, ng_words):
         i["image"] = next((m["image"] for m in (lead, *related) if unique(m["image"])), "")
 
 
+# ---------------------------------------------------------------- ランキング
+
+RAKUTEN_BOOKS = "https://openapi.rakuten.co.jp/services/api/BooksBook/Search/20170404"
+
+
+def fetch_json(url, headers=None):
+    return json.loads(fetch(url, headers))
+
+
+def apple_ranking(r):
+    results = fetch_json(r["url"])["feed"]["results"]
+    return [{"title": x["name"], "sub": x.get("artistName", ""), "url": x["url"],
+             "image": x.get("artworkUrl100", "")} for x in results]
+
+
+def rakuten_ranking(r):
+    app_id, key = os.environ.get("RAKUTEN_APP_ID"), os.environ.get("RAKUTEN_ACCESS_KEY")
+    if not (app_id and key):
+        raise RuntimeError("RAKUTEN_APP_ID / RAKUTEN_ACCESS_KEY が未設定")
+    query = urllib.parse.urlencode({
+        "applicationId": app_id, "accessKey": key, "booksGenreId": r.get("genre", "001"),
+        "sort": "sales", "hits": 30, "formatVersion": 2,
+    })
+    items = fetch_json(f"{RAKUTEN_BOOKS}?{query}", {"Referer": r["referer"]})["Items"]
+    excluded = tuple(r.get("exclude_genres", []))
+    out = []
+    for x in items:
+        genres = (x.get("booksGenreId") or "").split("/")
+        if excluded and any(g.startswith(excluded) for g in genres):
+            continue
+        out.append({"title": x["title"], "sub": x.get("author", ""), "url": x["itemUrl"],
+                    "image": x.get("mediumImageUrl", "")})
+    return out
+
+
+def load_rankings(cfg, cache):
+    out = []
+    for r in cfg.get("rankings", []):
+        entry = {"id": r["id"], "name": r["name"], "source": r["source"], "items": [], "error": None}
+        key = "ranking:" + r["id"]
+        try:
+            fn = {"apple": apple_ranking, "rakuten": rakuten_ranking}[r["type"]]
+            entry["items"] = fn(r)[:r.get("count", 10)]
+            cache.set(key, entry["items"])
+        except Exception as e:  # noqa: BLE001 - 取れなかったときは前回の結果を使う
+            entry["error"] = f"{type(e).__name__}: {e}"[:200]
+            entry["items"] = cache.get(key) or []
+        out.append(entry)
+    return out
+
+
 # ---------------------------------------------------------------- メイン
 
 def main():
@@ -341,10 +393,11 @@ def main():
             "newest": newest.isoformat() if newest else None,
         })
         only = feed.get("only_sources")
+        feed_max_age = dt.timedelta(hours=feed["max_age_hours"]) if "max_age_hours" in feed else max_age
         for a in items:
             if a["date"] is None:
                 a["date"] = now
-            if now - a["date"] > max_age:
+            if now - a["date"] > feed_max_age:
                 stats["old"] += 1
             elif only and not source_matches(a, only):
                 stats["not_selected"] += 1
@@ -358,6 +411,7 @@ def main():
                 a["priority"] = feed.get("priority", 5)
                 a["boost"] = feed.get("boost", 0)
                 a["short_title"] = feed.get("short_title", False)
+                a["always_show"] = feed.get("always_show", False)
                 a["grams"] = bigrams(a["title"])
                 articles.append(a)
 
@@ -395,6 +449,7 @@ def main():
         out_sections[lead["section"]]["items"].append({
             "score": score,
             "_hot": hot if hours <= 18 else None,
+            "_always": any(m["always_show"] for m in c),
             "headline": short,
             "coverage": coverage,
             "title": lead["title"],
@@ -412,12 +467,14 @@ def main():
 
     for s in out_sections:
         s["items"].sort(key=lambda i: -i["score"])
-        s["items"] = s["items"][:per_section]
+        # 上限件数まで＋ always_show の情報源の記事は必ず残す
+        s["items"] = s["items"][:per_section] + [i for i in s["items"][per_section:] if i["_always"]]
         for i in s["items"]:
-            del i["score"]
+            del i["score"], i["_always"]
 
     cache = Cache(CACHE)
     enrich([i for s in out_sections for i in s["items"]], cache, ng_words)
+    rankings = load_rankings(cfg, cache)
     cache.save()
 
     # 主要トピックス：全ジャンルから話題の大きいものを選ぶ（各ジャンルにも残す。ページ側で重複を調整）
@@ -438,6 +495,7 @@ def main():
         "show_per_section": settings.get("show_per_section", 8),
         "hot": hot,  # 主要トピックスに出す記事の id（上から順に）
         "sections": out_sections,
+        "rankings": rankings,
         "feeds": feed_status,
         "filtered": stats,
     }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
@@ -450,6 +508,9 @@ def main():
         mark = "OK" if f["ok"] else "NG"
         print(f"  [{mark}] {f['section']:<6} {f['source']:<12} {f['count']:>4}件  最新 {f['newest'] or '-'}"
               + (f"  {f['error']}" if f["error"] else ""))
+    for r in rankings:
+        print(f"  [{'NG' if r['error'] else 'OK'}] ランキング {r['name']} {len(r['items'])}件"
+              + (f"  {r['error']}" if r["error"] else ""))
 
 
 def _load(feed):
