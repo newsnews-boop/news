@@ -1,0 +1,22 @@
+# GitHub は60日間リポジトリに変更がないと定期実行を自動停止するため、
+# 月に1回、中身のない記録（コミット）を残して停止を防ぐ
+name: 定期実行の維持
+
+on:
+  schedule:
+    - cron: "0 3 1 * *"   # 毎月1日
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "keepalive"
+          git push
