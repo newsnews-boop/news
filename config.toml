@@ -242,8 +242,8 @@ name = "エンタメ・文化"
 #  ・type = "rakuten" : 楽天ブックスの売上順。楽天ウェブサービスの アプリID と アクセスキー を
 #                       GitHub の Secrets に RAKUTEN_APP_ID / RAKUTEN_ACCESS_KEY として登録すると表示されます
 #    referer : 楽天のアプリ設定に登録した「WebサイトURL」と同じもの
-#    genre : 楽天ブックスのジャンルID（001 = 本 全体）
-#    exclude_genres : 除外するジャンルID（001001 = 漫画）
+#    include_genres : 「本」全体の売上順から、名前にこの語を含むジャンルの本だけを残す
+#                     （漫画・写真集・カレンダーなどを除いた、本屋の総合ランキングに近い形になる）
 # ---------------------------------------------------------------------
 [[rankings]]
 id = "music"
@@ -257,6 +257,10 @@ id = "books"
 name = "本"
 source = "楽天ブックス"
 type = "rakuten"
-genre = "001"
-exclude_genres = ["001001"]
+include_genres = [
+  "小説",                # 小説・エッセイ
+  "ビジネス",            # ビジネス・経済・就職（自己啓発・投資を含む）
+  "人文", "新書",        # 人文・思想・社会、新書
+  "暮らし",              # 美容・暮らし・健康・料理
+]
 referer = "https://newsnews-boop.github.io/news/"

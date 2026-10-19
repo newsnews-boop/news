@@ -314,52 +314,85 @@ def enrich(items, cache, ng_words):
 
 # ---------------------------------------------------------------- ランキング
 
-RAKUTEN_BOOKS = "https://openapi.rakuten.co.jp/services/api/BooksBook/Search/20170404"
+RAKUTEN_API = "https://openapi.rakuten.co.jp/services/api/"
+RAKUTEN_BOOKS = RAKUTEN_API + "BooksBook/Search/20170404"
+RAKUTEN_GENRE = RAKUTEN_API + "BooksGenre/Search/20121128"
+RAKUTEN_PAGES = 3  # 「本」全体の売上順を何ページ（1ページ30件）見るか
 
 
 def fetch_json(url, headers=None):
     return json.loads(fetch(url, headers))
 
 
-def apple_ranking(r):
+def apple_ranking(r, cache):
     results = fetch_json(r["url"])["feed"]["results"]
     return [{"title": x["name"], "sub": x.get("artistName", ""), "url": x["url"],
-             "image": x.get("artworkUrl100", "")} for x in results]
+             "image": x.get("artworkUrl100", "")} for x in results], None
 
 
-def rakuten_ranking(r):
+def rakuten_get(url, params, referer):
     app_id, key = os.environ.get("RAKUTEN_APP_ID"), os.environ.get("RAKUTEN_ACCESS_KEY")
     if not (app_id and key):
         raise RuntimeError("RAKUTEN_APP_ID / RAKUTEN_ACCESS_KEY が未設定")
-    query = urllib.parse.urlencode({
-        "applicationId": app_id, "accessKey": key, "booksGenreId": r.get("genre", "001"),
-        "sort": "sales", "hits": 30, "formatVersion": 2,
-    })
+    query = urllib.parse.urlencode({"applicationId": app_id, "accessKey": key, "formatVersion": 2, **params})
     # 楽天は「許可されたWebサイト」からの呼び出しかを Referer と Origin の両方で確かめる
-    site = urllib.parse.urlparse(r["referer"])
-    req = urllib.request.Request(f"{RAKUTEN_BOOKS}?{query}", headers={
-        "User-Agent": USER_AGENT, "Referer": r["referer"], "Origin": f"{site.scheme}://{site.netloc}"})
-    # 楽天は1秒に1回までの制限があるため、再試行の前に間をあける。失敗時は楽天の説明文を記録する
+    site = urllib.parse.urlparse(referer)
+    req = urllib.request.Request(f"{url}?{query}", headers={
+        "User-Agent": USER_AGENT, "Referer": referer, "Origin": f"{site.scheme}://{site.netloc}"})
+    # 楽天は1秒に1回までの制限があるため、呼び出しごと・再試行の前に間をあける
     for attempt in range(2):
+        time.sleep(1.2)
         try:
             with urllib.request.urlopen(req, timeout=20) as res:
-                data = json.loads(res.read())
-            break
+                return json.loads(res.read())
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:150]
             if attempt == 1 or e.code not in (429, 500, 502, 503):
                 raise RuntimeError(f"HTTP {e.code} {detail}") from None
             time.sleep(3)
-    items = data["Items"]
-    excluded = tuple(r.get("exclude_genres", []))
-    out = []
-    for x in items:
-        genres = (x.get("booksGenreId") or "").split("/")
-        if excluded and any(g.startswith(excluded) for g in genres):
-            continue
-        out.append({"title": x["title"], "sub": x.get("author", ""), "url": x["itemUrl"],
-                    "image": x.get("mediumImageUrl", "")})
-    return out
+
+
+def genre_children(genre_id, referer, cache):
+    """楽天ブックスのジャンルの子ジャンル一覧 [(id, 名前)]。数日分は保存して使い回す。"""
+    key = "rakuten-genre:" + genre_id
+    if cache.get(key) is None:
+        data = rakuten_get(RAKUTEN_GENRE, {"booksGenreId": genre_id}, referer)
+        children = []
+        for c in data.get("children", []):
+            c = c.get("child", c)  # 応答形式の違いを吸収
+            children.append([c["booksGenreId"], c["booksGenreName"]])
+        cache.set(key, children)
+    return cache.get(key)
+
+
+def rakuten_ranking(r, cache):
+    # 「本」の中から、名前に include_genres の語を含むジャンルを選ぶ
+    words = r.get("include_genres", [])
+    tops = genre_children("001", r["referer"], cache)
+    chosen = [(gid, name) for gid, name in tops if any(w in name for w in words)]
+    if not chosen:
+        raise RuntimeError(f"該当ジャンルなし: {[n for _, n in tops]}")
+    # 確認用：選んだジャンルと、その中の小分類の名前を記録する
+    debug = [{"id": gid, "name": name,
+              "children": [n for _, n in genre_children(gid, r["referer"], cache)]} for gid, name in chosen]
+    prefixes = tuple(gid for gid, _ in chosen)
+
+    # 「本」全体の売上順から、選んだジャンルの本だけを順に拾う（ジャンル間の売れ行き順を保つ）
+    out, seen = [], set()
+    for page in range(1, RAKUTEN_PAGES + 1):
+        data = rakuten_get(RAKUTEN_BOOKS, {"booksGenreId": "001", "sort": "sales", "hits": 30, "page": page},
+                           r["referer"])
+        for x in data["Items"]:
+            genres = (x.get("booksGenreId") or "").split("/")
+            if not any(g.startswith(prefixes) for g in genres) or x["itemUrl"] in seen:
+                continue
+            seen.add(x["itemUrl"])
+            title = re.sub(r"^(【[^】]*】\s*)+", "", x["title"]).strip() or x["title"]  # 【限定特典】等を外す
+            out.append({"title": title, "sub": x.get("author", ""), "url": x["itemUrl"],
+                        "image": x.get("mediumImageUrl", "")})
+        if len(out) >= r.get("count", 10):
+            break
+    return out, debug
 
 
 def load_rankings(cfg, cache):
@@ -369,7 +402,10 @@ def load_rankings(cfg, cache):
         key = "ranking:" + r["id"]
         try:
             fn = {"apple": apple_ranking, "rakuten": rakuten_ranking}[r["type"]]
-            entry["items"] = fn(r)[:r.get("count", 10)]
+            items, debug = fn(r, cache)
+            entry["items"] = items[:r.get("count", 10)]
+            if debug:
+                entry["genres"] = debug
             cache.set(key, entry["items"])
         except Exception as e:  # noqa: BLE001 - 取れなかったときは前回の結果を使う
             entry["error"] = f"{type(e).__name__}: {e}"[:200]
