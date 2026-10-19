@@ -335,8 +335,10 @@ def rakuten_ranking(r):
         "applicationId": app_id, "accessKey": key, "booksGenreId": r.get("genre", "001"),
         "sort": "sales", "hits": 30, "formatVersion": 2,
     })
-    req = urllib.request.Request(f"{RAKUTEN_BOOKS}?{query}",
-                                 headers={"User-Agent": USER_AGENT, "Referer": r["referer"]})
+    # 楽天は「許可されたWebサイト」からの呼び出しかを Referer と Origin の両方で確かめる
+    site = urllib.parse.urlparse(r["referer"])
+    req = urllib.request.Request(f"{RAKUTEN_BOOKS}?{query}", headers={
+        "User-Agent": USER_AGENT, "Referer": r["referer"], "Origin": f"{site.scheme}://{site.netloc}"})
     # 楽天は1秒に1回までの制限があるため、再試行の前に間をあける。失敗時は楽天の説明文を記録する
     for attempt in range(2):
         try:
