@@ -25,6 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config.toml"
 OUTPUT = ROOT / "site" / "data" / "news.json"
 CACHE = ROOT / "cache" / "enrich.json"
+INDEX = ROOT / "site" / "index.html"
 USER_AGENT = "Mozilla/5.0 (personal news reader)"
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/130.0 Safari/537.36")
@@ -510,8 +511,12 @@ def main():
         sys.exit(1)
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    # 画面の版番号（index.html の app.js?v=N）。開いている画面が古ければ、ページ側が自動で入れ替える
+    version = re.search(r"app\.js\?v=(\d+)", INDEX.read_text(encoding="utf-8"))
+
     OUTPUT.write_text(json.dumps({
         "generated_at": now.isoformat(),
+        "app_version": version.group(1) if version else "",
         "show_per_section": settings.get("show_per_section", 8),
         "hot": hot,  # 主要トピックスに出す記事の id（上から順に）
         "sections": out_sections,

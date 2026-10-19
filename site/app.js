@@ -1,5 +1,9 @@
 "use strict";
 
+// この画面の版番号（index.html で読み込むときの app.js?v=N）
+const APP_VERSION = (() => {
+  try { return new URL(document.currentScript.src).searchParams.get("v") || ""; } catch { return ""; }
+})();
 const DATA_URL = "data/news.json";
 const KEEP_DAYS = 4;          // 既読・非表示の記録を残す日数
 const STREAM_PAGE = 30;       // ニュース一覧を一度に表示する件数
@@ -415,6 +419,7 @@ async function fetchData() {
     const res = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error(res.status);
     data = await res.json();
+    if (updateIfOutdated(data.app_version)) return;
     render();
   } catch (e) {
     if (!data) {
@@ -424,6 +429,17 @@ async function fetchData() {
   } finally {
     btn.classList.remove("spinning");
   }
+}
+
+// 新しい版が公開されていたら、ページを開き直して入れ替える（同じ版への再試行は1回まで）
+function updateIfOutdated(latest) {
+  if (!latest || !APP_VERSION || latest === APP_VERSION) return false;
+  let tried = "";
+  try { tried = sessionStorage.getItem("news.updatedTo") || ""; } catch { /* 記録できなくても続ける */ }
+  if (tried === latest) return false;
+  try { sessionStorage.setItem("news.updatedTo", latest); } catch { /* 同上 */ }
+  location.replace(`${location.pathname}?v=${latest}`);
+  return true;
 }
 
 const lines = (text) => text.split("\n").map((s) => s.trim()).filter(Boolean);
@@ -490,10 +506,10 @@ prune(read, STORE.read);
 prune(dismissed, STORE.dismissed);
 setupSettings();
 document.getElementById("reload").addEventListener("click", fetchData);
-// アプリを切り替えて戻ってきたとき、15分以上たっていれば最新を取りに行く
+// アプリを切り替えて戻ってきたとき、5分以上たっていれば最新を取りに行く（新しい版の確認も兼ねる）
 let lastFetch = Date.now();
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && Date.now() - lastFetch > 15 * 60 * 1000) {
+  if (document.visibilityState === "visible" && Date.now() - lastFetch > 5 * 60 * 1000) {
     lastFetch = Date.now();
     fetchData();
   }
