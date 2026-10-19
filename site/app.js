@@ -260,31 +260,42 @@ function renderTopics(counter) {
 
 // ---------------------------------------------------------------- ランキング
 
-const RANKING_SHOWN = 5;
-const rankingsOpen = new Set();
+const rankingsOpen = new Set();  // 「〜位を見る」を開いた一覧
+
+const outLink = (url, cls, ...children) =>
+  el("a", { class: cls, href: safeUrl(url), target: "_blank", rel: "noopener noreferrer" }, ...children);
+
+function renderRankingGroup(r, g) {
+  const key = `${r.id}:${g.name}`;
+  const open = rankingsOpen.has(key);
+  const show = r.show || 5;
+  const items = open ? g.items : g.items.slice(0, show);
+  return el("div", { class: "ranking-group" },
+    g.name ? el("h3", { class: "ranking-group-head" }, g.name) : null,
+    el("ol", { class: "ranking-list" }, ...items.map((x, n) =>
+      el("li", {}, outLink(x.url, "",
+        el("span", { class: "rank" }, String(n + 1)),
+        thumb(x.image, "ranking-img"),
+        el("span", { class: "ranking-text" },
+          el("span", { class: "ranking-title" }, x.title),
+          el("span", { class: "ranking-sub" }, x.sub)))))),
+    el("div", { class: "ranking-actions" },
+      g.items.length > show ? el("button", {
+        class: "show-more", type: "button",
+        onclick: () => { open ? rankingsOpen.delete(key) : rankingsOpen.add(key); render(); },
+      }, open ? "閉じる" : `${show + 1}〜${g.items.length}位を見る`) : null,
+      g.link ? outLink(g.link, "ranking-out", `${r.source}で見る →`) : null));
+}
 
 function renderRankings() {
-  const lists = (data.rankings || []).filter((r) => r.items.length);
+  const lists = (data.rankings || []).filter((r) => (r.groups || []).some((g) => g.items.length));
   if (!lists.length) return null;
   return el("section", { class: "rankings", "aria-label": "ランキング" },
-    ...lists.map((r) => {
-      const open = rankingsOpen.has(r.id);
-      const items = open ? r.items : r.items.slice(0, RANKING_SHOWN);
-      return el("div", { class: "ranking" },
-        el("h2", { class: "ranking-head" }, `${r.name}ランキング`, el("small", {}, r.source)),
-        el("ol", { class: "ranking-list" }, ...items.map((x, n) =>
-          el("li", {},
-            el("a", { href: safeUrl(x.url), target: "_blank", rel: "noopener noreferrer" },
-              el("span", { class: "rank" }, String(n + 1)),
-              thumb(x.image, "ranking-img"),
-              el("span", { class: "ranking-text" },
-                el("span", { class: "ranking-title" }, x.title),
-                el("span", { class: "ranking-sub" }, x.sub)))))),
-        r.items.length > RANKING_SHOWN ? el("button", {
-          class: "show-more", type: "button",
-          onclick: () => { open ? rankingsOpen.delete(r.id) : rankingsOpen.add(r.id); render(); },
-        }, open ? "閉じる" : `${RANKING_SHOWN + 1}〜${r.items.length}位を見る`) : null);
-    }));
+    ...lists.map((r) => el("div", { class: "ranking" },
+      el("h2", { class: "ranking-head" }, `${r.name}ランキング`, el("small", {}, r.source)),
+      ...r.groups.filter((g) => g.items.length).map((g) => renderRankingGroup(r, g)),
+      r.links && r.links.length ? el("p", { class: "ranking-links" }, "もっと見る：",
+        ...r.links.map((l) => outLink(l.url, "", `${l.name} →`))) : null)));
 }
 
 // ---------------------------------------------------------------- ニュース一覧（新しい順）

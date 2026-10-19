@@ -239,11 +239,12 @@ name = "エンタメ・文化"
 # ---------------------------------------------------------------------
 #  ランキング（トピックスとニュース一覧の間に表示）
 #  ・type = "apple"   : Apple のランキング（登録不要）
-#  ・type = "rakuten" : 楽天ブックスの売上順。楽天ウェブサービスの アプリID と アクセスキー を
+#  ・type = "rakuten" : 楽天ブックスのジャンル別売上順。楽天ウェブサービスの アプリID と アクセスキー を
 #                       GitHub の Secrets に RAKUTEN_APP_ID / RAKUTEN_ACCESS_KEY として登録すると表示されます
 #    referer : 楽天のアプリ設定に登録した「WebサイトURL」と同じもの
-#    include_genres : 「本」全体の売上順から、名前にこの語を含むジャンルの本だけを残す
-#                     （漫画・写真集・カレンダーなどを除いた、本屋の総合ランキングに近い形になる）
+#  ・show   : 最初に表示する件数（残りは「〜位を見る」で開く）
+#  ・groups : ジャンルごとのランキング（genre は楽天ブックスのジャンルID、link は「楽天で見る」の行き先）
+#  ・links  : 箱の下に並べる外部ランキングへのリンク
 # ---------------------------------------------------------------------
 [[rankings]]
 id = "music"
@@ -251,16 +252,29 @@ name = "音楽"
 source = "Apple Music"
 type = "apple"
 url = "https://rss.marketingtools.apple.com/api/v2/jp/music/most-played/10/songs.json"
+show = 5
 
 [[rankings]]
 id = "books"
 name = "本"
 source = "楽天ブックス"
 type = "rakuten"
-include_genres = [
-  "小説",                # 小説・エッセイ
-  "ビジネス",            # ビジネス・経済・就職（自己啓発・投資を含む）
-  "人文", "新書",        # 人文・思想・社会、新書
-  "暮らし",              # 美容・暮らし・健康・料理
-]
 referer = "https://newsnews-boop.github.io/news/"
+show = 3
+  [[rankings.groups]]
+  name = "小説"
+  genre = "001004"   # 小説・エッセイ
+  link = "https://books.rakuten.co.jp/ranking/hourly/001004/"
+  [[rankings.groups]]
+  name = "ビジネス"
+  genre = "001006"   # ビジネス・経済・就職（自己啓発・投資・マネープランを含む）
+  link = "https://books.rakuten.co.jp/ranking/hourly/001006/"
+  [[rankings.links]]
+  name = "楽天ブックス総合"
+  url = "https://books.rakuten.co.jp/ranking/weekly/001/"
+  [[rankings.links]]
+  name = "Amazon売れ筋"
+  url = "https://www.amazon.co.jp/gp/bestsellers/books/"
+  [[rankings.links]]
+  name = "Audible人気"
+  url = "https://www.audible.co.jp/charts/best"

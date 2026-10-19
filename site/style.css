@@ -198,7 +198,21 @@ button { font: inherit; color: inherit; }
 .ranking-title { font-size: .92rem; }
 .ranking-list a:hover .ranking-title { text-decoration: underline; }
 .ranking-sub { color: var(--sub); font-size: .75rem; }
+.ranking-group + .ranking-group { margin-top: 6px; }
+.ranking-group-head {
+  font-size: .8rem; font-weight: 700; color: var(--accent); margin: 4px 0 0;
+  padding-bottom: 4px; border-bottom: 1px solid var(--line);
+}
+.ranking-actions { display: flex; align-items: center; gap: 12px; }
 .ranking .show-more { padding-left: 0; }
+.ranking-out { margin-left: auto; color: var(--link); font-size: .8rem; text-decoration: none; }
+.ranking-out:hover { text-decoration: underline; }
+.ranking-links {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 4px; padding-top: 8px;
+  border-top: 1px solid var(--line); color: var(--sub); font-size: .8rem;
+}
+.ranking-links a { color: var(--link); text-decoration: none; }
+.ranking-links a:hover { text-decoration: underline; }
 
 /* ---------- ニュース一覧（新しい順） ---------- */
 .stream-head {

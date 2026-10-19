@@ -314,20 +314,17 @@ def enrich(items, cache, ng_words):
 
 # ---------------------------------------------------------------- ランキング
 
-RAKUTEN_API = "https://openapi.rakuten.co.jp/services/api/"
-RAKUTEN_BOOKS = RAKUTEN_API + "BooksBook/Search/20170404"
-RAKUTEN_GENRE = RAKUTEN_API + "BooksGenre/Search/20121128"
-RAKUTEN_PAGES = 3  # 「本」全体の売上順を何ページ（1ページ30件）見るか
+RAKUTEN_BOOKS = "https://openapi.rakuten.co.jp/services/api/BooksBook/Search/20170404"
 
 
 def fetch_json(url, headers=None):
     return json.loads(fetch(url, headers))
 
 
-def apple_ranking(r, cache):
+def apple_ranking(r):
     results = fetch_json(r["url"])["feed"]["results"]
     return [{"title": x["name"], "sub": x.get("artistName", ""), "url": x["url"],
-             "image": x.get("artworkUrl100", "")} for x in results], None
+             "image": x.get("artworkUrl100", "")} for x in results]
 
 
 def rakuten_get(url, params, referer):
@@ -352,64 +349,36 @@ def rakuten_get(url, params, referer):
             time.sleep(3)
 
 
-def genre_children(genre_id, referer, cache):
-    """楽天ブックスのジャンルの子ジャンル一覧 [(id, 名前)]。数日分は保存して使い回す。"""
-    key = "rakuten-genre:" + genre_id
-    if cache.get(key) is None:
-        data = rakuten_get(RAKUTEN_GENRE, {"booksGenreId": genre_id}, referer)
-        children = []
-        for c in data.get("children", []):
-            c = c.get("child", c)  # 応答形式の違いを吸収
-            children.append([c["booksGenreId"], c["booksGenreName"]])
-        cache.set(key, children)
-    return cache.get(key)
-
-
-def rakuten_ranking(r, cache):
-    # 「本」の中から、名前に include_genres の語を含むジャンルを選ぶ
-    words = r.get("include_genres", [])
-    tops = genre_children("001", r["referer"], cache)
-    chosen = [(gid, name) for gid, name in tops if any(w in name for w in words)]
-    if not chosen:
-        raise RuntimeError(f"該当ジャンルなし: {[n for _, n in tops]}")
-    # 確認用：選んだジャンルと、その中の小分類の名前を記録する
-    debug = [{"id": gid, "name": name,
-              "children": [n for _, n in genre_children(gid, r["referer"], cache)]} for gid, name in chosen]
-    prefixes = tuple(gid for gid, _ in chosen)
-
-    # 「本」全体の売上順から、選んだジャンルの本だけを順に拾う（ジャンル間の売れ行き順を保つ）
-    out, seen = [], set()
-    for page in range(1, RAKUTEN_PAGES + 1):
-        data = rakuten_get(RAKUTEN_BOOKS, {"booksGenreId": "001", "sort": "sales", "hits": 30, "page": page},
-                           r["referer"])
-        for x in data["Items"]:
-            genres = (x.get("booksGenreId") or "").split("/")
-            if not any(g.startswith(prefixes) for g in genres) or x["itemUrl"] in seen:
-                continue
-            seen.add(x["itemUrl"])
-            title = re.sub(r"^(【[^】]*】\s*)+", "", x["title"]).strip() or x["title"]  # 【限定特典】等を外す
-            out.append({"title": title, "sub": x.get("author", ""), "url": x["itemUrl"],
-                        "image": x.get("mediumImageUrl", "")})
-        if len(out) >= r.get("count", 10):
-            break
-    return out, debug
+def rakuten_group(r, group):
+    """楽天ブックスの1ジャンルの売上順。"""
+    data = rakuten_get(RAKUTEN_BOOKS, {"booksGenreId": group["genre"], "sort": "sales",
+                                       "hits": r.get("count", 10)}, r["referer"])
+    return [{
+        "title": re.sub(r"^(【[^】]*】\s*)+", "", x["title"]).strip() or x["title"],  # 【限定特典】等を外す
+        "sub": x.get("author", ""), "url": x["itemUrl"], "image": x.get("mediumImageUrl", ""),
+    } for x in data["Items"]]
 
 
 def load_rankings(cfg, cache):
+    """ランキングを取得する。各ランキングは groups（見出し付きの一覧）のリストとして出力する。
+    取れなかったときは前回の結果を使う。"""
     out = []
     for r in cfg.get("rankings", []):
-        entry = {"id": r["id"], "name": r["name"], "source": r["source"], "items": [], "error": None}
-        key = "ranking:" + r["id"]
-        try:
-            fn = {"apple": apple_ranking, "rakuten": rakuten_ranking}[r["type"]]
-            items, debug = fn(r, cache)
-            entry["items"] = items[:r.get("count", 10)]
-            if debug:
-                entry["genres"] = debug
-            cache.set(key, entry["items"])
-        except Exception as e:  # noqa: BLE001 - 取れなかったときは前回の結果を使う
-            entry["error"] = f"{type(e).__name__}: {e}"[:200]
-            entry["items"] = cache.get(key) or []
+        entry = {"id": r["id"], "name": r["name"], "source": r["source"], "show": r.get("show", 5),
+                 "groups": [], "links": r.get("links", []), "errors": []}
+        if r["type"] == "apple":
+            jobs = [({"name": ""}, lambda: apple_ranking(r))]
+        else:
+            jobs = [(g, lambda g=g: rakuten_group(r, g)) for g in r.get("groups", [])]
+        for group, fn in jobs:
+            key = f"ranking:{r['id']}:{group['name']}"
+            try:
+                items = fn()[:r.get("count", 10)]
+                cache.set(key, items)
+            except Exception as e:  # noqa: BLE001
+                entry["errors"].append(f"{group['name']} {type(e).__name__}: {e}"[:200])
+                items = cache.get(key) or []
+            entry["groups"].append({"name": group["name"], "link": group.get("link", ""), "items": items})
         out.append(entry)
     return out
 
@@ -560,8 +529,9 @@ def main():
         print(f"  [{mark}] {f['section']:<6} {f['source']:<12} {f['count']:>4}件  最新 {f['newest'] or '-'}"
               + (f"  {f['error']}" if f["error"] else ""))
     for r in rankings:
-        print(f"  [{'NG' if r['error'] else 'OK'}] ランキング {r['name']} {len(r['items'])}件"
-              + (f"  {r['error']}" if r["error"] else ""))
+        counts = " ".join(f"{g['name'] or r['name']}{len(g['items'])}件" for g in r["groups"])
+        print(f"  [{'NG' if r['errors'] else 'OK'}] ランキング {r['name']}: {counts}"
+              + (f"  {r['errors']}" if r["errors"] else ""))
 
 
 def _load(feed):
