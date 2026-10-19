@@ -335,7 +335,20 @@ def rakuten_ranking(r):
         "applicationId": app_id, "accessKey": key, "booksGenreId": r.get("genre", "001"),
         "sort": "sales", "hits": 30, "formatVersion": 2,
     })
-    items = fetch_json(f"{RAKUTEN_BOOKS}?{query}", {"Referer": r["referer"]})["Items"]
+    req = urllib.request.Request(f"{RAKUTEN_BOOKS}?{query}",
+                                 headers={"User-Agent": USER_AGENT, "Referer": r["referer"]})
+    # 楽天は1秒に1回までの制限があるため、再試行の前に間をあける。失敗時は楽天の説明文を記録する
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(req, timeout=20) as res:
+                data = json.loads(res.read())
+            break
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:150]
+            if attempt == 1 or e.code not in (429, 500, 502, 503):
+                raise RuntimeError(f"HTTP {e.code} {detail}") from None
+            time.sleep(3)
+    items = data["Items"]
     excluded = tuple(r.get("exclude_genres", []))
     out = []
     for x in items:
