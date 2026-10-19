@@ -324,8 +324,16 @@ def fetch_json(url, headers=None):
 
 def apple_ranking(r):
     results = fetch_json(r["url"])["feed"]["results"]
+    # 30秒の試聴用音源（iTunes Search API）。取れなくてもランキングは出す
+    previews = {}
+    try:
+        ids = ",".join(x["id"] for x in results)
+        lookup = fetch_json(f"https://itunes.apple.com/lookup?country=jp&id={ids}")
+        previews = {str(x.get("trackId")): x.get("previewUrl", "") for x in lookup.get("results", [])}
+    except Exception:  # noqa: BLE001
+        pass
     return [{"title": x["name"], "sub": x.get("artistName", ""), "url": x["url"],
-             "image": x.get("artworkUrl100", "")} for x in results]
+             "image": x.get("artworkUrl100", ""), "preview": previews.get(x["id"], "")} for x in results]
 
 
 def rakuten_get(url, params, referer):

@@ -277,12 +277,16 @@ function renderRankingGroup(r, g) {
   return el("div", { class: "ranking-group" },
     g.name ? el("h3", { class: "ranking-group-head" }, g.name) : null,
     el("ol", { class: "ranking-list" }, ...items.map((x, n) =>
-      el("li", {}, outLink(x.url, "",
+      el("li", {},
         el("span", { class: "rank" }, String(n + 1)),
-        thumb(x.image, "ranking-img"),
-        el("span", { class: "ranking-text" },
+        // 試聴できる曲はジャケットが再生ボタンになる
+        x.preview ? el("button", {
+          class: "ranking-play", type: "button", "aria-label": `「${x.title}」を試聴`,
+          onclick: (e) => togglePreview(x.preview, e.currentTarget),
+        }, thumb(x.image, "ranking-img")) : thumb(x.image, "ranking-img"),
+        outLink(x.url, "ranking-link",
           el("span", { class: "ranking-title" }, x.title),
-          el("span", { class: "ranking-sub" }, x.sub)))))),
+          el("span", { class: "ranking-sub" }, x.sub))))),
     el("div", { class: "ranking-actions" },
       g.items.length > show ? el("button", {
         class: "show-more", type: "button",
@@ -291,12 +295,35 @@ function renderRankingGroup(r, g) {
       g.link ? outLink(g.link, "ranking-out", `${r.source}で見る →`) : null));
 }
 
+// 試聴（同時に流れるのは1曲だけ。同じボタンをもう一度押すと止まる）
+let player = null;
+let playingBtn = null;
+
+function stopPreview() {
+  if (player) player.pause();
+  if (playingBtn) playingBtn.classList.remove("playing");
+  player = null;
+  playingBtn = null;
+}
+
+function togglePreview(url, btn) {
+  const same = playingBtn === btn;
+  stopPreview();
+  if (same) return;
+  player = new Audio(url);
+  playingBtn = btn;
+  btn.classList.add("playing");
+  player.addEventListener("ended", stopPreview);
+  player.play().catch(stopPreview);
+}
+
 function renderRankings() {
   const lists = (data.rankings || []).filter((r) => (r.groups || []).some((g) => g.items.length));
   if (!lists.length) return null;
   return el("section", { class: "rankings", "aria-label": "ランキング" },
     ...lists.map((r) => el("div", { class: "ranking" },
-      el("h2", { class: "ranking-head" }, `${r.name}ランキング`, el("small", {}, r.source)),
+      el("h2", { class: "ranking-head" }, `${r.name}ランキング`, el("small", {},
+        r.source, r.groups.some((g) => g.items.some((x) => x.preview)) ? " · ジャケットを押すと試聴" : "")),
       ...r.groups.filter((g) => g.items.length).map((g) => renderRankingGroup(r, g)),
       r.links && r.links.length ? el("p", { class: "ranking-links" }, "もっと見る：",
         ...r.links.map((l) => outLink(l.url, "", `${l.name} →`))) : null)));
@@ -358,6 +385,7 @@ function render() {
   const main = document.getElementById("main");
   const scrollY = window.scrollY;
   const counter = { hidden: 0 };
+  stopPreview();  // 描き直すと再生ボタンが作り直されるので、試聴は止める
   const topics = renderTopics(counter);
   // 主要タブの話題は一覧に重ねて出さない
   const stream = renderStream({ hidden: 0 }, data.hot || []);

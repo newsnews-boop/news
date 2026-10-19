@@ -1,0 +1,4 @@
+# 公開時に GitHub Actions が毎回作り直すため、記録しない
+site/data/
+cache/
+__pycache__/

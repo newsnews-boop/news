@@ -186,17 +186,26 @@ button { font: inherit; color: inherit; }
 .ranking-head small { color: var(--sub); font-weight: normal; font-size: .72rem; }
 .ranking-list { list-style: none; margin: 0; padding: 0; }
 .ranking-list li + li { border-top: 1px solid var(--line); }
-.ranking-list a {
-  display: flex; align-items: center; gap: 10px; padding: 7px 0;
-  color: var(--text); text-decoration: none;
-}
+.ranking-list li { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+.ranking-link { display: grid; flex: 1; min-width: 0; color: var(--text); text-decoration: none; }
 .rank { flex: none; width: 1.4em; text-align: center; font-weight: 700; color: var(--sub); font-size: .9rem; }
 .ranking-list li:nth-child(-n+3) .rank { color: var(--accent); }
-.ranking-img { flex: none; width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: var(--chip); }
-.ranking-text { display: grid; min-width: 0; }
+.ranking-img { flex: none; display: block; width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: var(--chip); }
 .ranking-title, .ranking-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ranking-title { font-size: .92rem; }
-.ranking-list a:hover .ranking-title { text-decoration: underline; }
+.ranking-link:hover .ranking-title { text-decoration: underline; }
+
+/* 試聴ボタン：ジャケットの上に ▶（再生中は ■） */
+.ranking-play {
+  position: relative; flex: none; width: 44px; height: 44px; padding: 0; border: 0;
+  border-radius: 6px; background: var(--chip); cursor: pointer;
+}
+.ranking-play::after {
+  content: "▶"; position: absolute; inset: 0; display: grid; place-items: center;
+  border-radius: 6px; background: rgb(0 0 0 / .32); color: #fff; font-size: .8rem;
+}
+.ranking-play.playing::after { content: "■"; background: rgb(0 0 0 / .55); }
+.ranking-play.playing { box-shadow: 0 0 0 2px var(--accent); }
 .ranking-sub { color: var(--sub); font-size: .75rem; }
 .ranking-group + .ranking-group { margin-top: 6px; }
 .ranking-group-head {
