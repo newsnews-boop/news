@@ -26,6 +26,7 @@ CONFIG = ROOT / "config.toml"
 OUTPUT = ROOT / "site" / "data" / "news.json"
 CACHE = ROOT / "cache" / "enrich.json"
 INDEX = ROOT / "site" / "index.html"
+HISTORY = ROOT / "cache" / "history.json"  # 日ごとの話題の記録（「昨日の振り返り」用）
 USER_AGENT = "Mozilla/5.0 (personal news reader)"
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/130.0 Safari/537.36")
@@ -428,6 +429,66 @@ def load_rankings(cfg, cache):
     return out
 
 
+# ---------------------------------------------------------------- 昨日の振り返り
+
+HISTORY_DAYS = 3        # 何日分の記録を残すか
+HISTORY_KEEP = 80       # 1日あたり何件の話題を残すか（話題の大きい順）
+YESTERDAY_COUNT = 5     # 「昨日の主な出来事」の件数
+YESTERDAY_SIMILARITY = 0.35  # 「昨日の主な出来事」で同じ出来事とみなす見出しの類似度（通常より緩め）
+
+
+def topic_score(t):
+    """話題の大きさ：報道社数の最大値。主要に選ばれたことがあれば加点。"""
+    return t["peak"] + (2 if t["hot"] else 0)
+
+
+def update_history(items, hot_ids, now):
+    """今回の話題を「最初に報じられた日（日本時間）」ごとに記録し、昨日の主な出来事を返す。
+    同じ話題かどうかは、記事の id が1つでも重なるかで判断する（代表記事が入れ替わっても追える）。"""
+    try:
+        history = json.loads(HISTORY.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        history = {}
+
+    for i in items:
+        ids = {i["id"], *(r["id"] for r in i["related"])}
+        first = min(dt.datetime.fromisoformat(t) for t in [i["time"], *(r["time"] for r in i["related"])])
+        day = first.astimezone(JST).date().isoformat()
+        topics = history.setdefault(day, [])
+        coverage = len({i["source"], *(r["source"] for r in i["related"])})
+        topic = next((t for t in topics if ids & set(t["ids"])), None)
+        if topic is None:
+            topics.append({"ids": sorted(ids), "peak": coverage, "hot": i["id"] in hot_ids, "item": i})
+            continue
+        topic["ids"] = sorted(ids | set(topic["ids"]))
+        topic["hot"] = topic["hot"] or i["id"] in hot_ids
+        if coverage >= topic["peak"]:  # いちばん広く報じられていた時点の内容を残す
+            topic["peak"] = coverage
+            topic["item"] = i
+
+    today = now.astimezone(JST).date()
+    keep = {(today - dt.timedelta(days=n)).isoformat() for n in range(HISTORY_DAYS)}
+    history = {day: sorted(topics, key=topic_score, reverse=True)[:HISTORY_KEEP]
+               for day, topics in history.items() if day in keep}
+    HISTORY.parent.mkdir(parents=True, exist_ok=True)
+    HISTORY.write_text(json.dumps(history, ensure_ascii=False), encoding="utf-8")
+
+    yesterday = (today - dt.timedelta(days=1)).isoformat()
+    topics = history.get(yesterday, [])
+    # 見出しの書き方が違って別の話題として数えられた同じ出来事は、ゆるい基準で見比べて1本にする
+    chosen, chosen_grams = [], []
+    for t in topics:
+        grams = [bigrams(t["item"]["headline"]), bigrams(t["item"]["title"])]
+        if any(similar(a, b, YESTERDAY_SIMILARITY) for a in grams for g in chosen_grams for b in g):
+            continue
+        chosen.append(t)
+        chosen_grams.append(grams)
+        if len(chosen) == YESTERDAY_COUNT:
+            break
+    return {"date": yesterday, "count": len(topics),
+            "items": [dict(t["item"], coverage=t["peak"]) for t in chosen]}
+
+
 # ---------------------------------------------------------------- メイン
 
 def main():
@@ -561,6 +622,8 @@ def main():
         for i in s["items"]:
             del i["_hot"]
 
+    yesterday = update_history([i for s in out_sections for i in s["items"]], set(hot), now)
+
     total = sum(len(s["items"]) for s in out_sections)
     if total == 0:
         print("記事を1件も取得できませんでした。出力を更新しません。", file=sys.stderr)
@@ -575,6 +638,7 @@ def main():
         "app_version": version.group(1) if version else "",
         "show_per_section": settings.get("show_per_section", 8),
         "hot": hot,  # 主要トピックスに出す記事の id（上から順に）
+        "yesterday": yesterday,  # 昨日（日本時間）の主な出来事
         "sections": out_sections,
         "rankings": rankings,
         "feeds": feed_status,

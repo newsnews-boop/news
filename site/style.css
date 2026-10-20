@@ -357,3 +357,15 @@ textarea {
 .settings button.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
 .feed-status { list-style: none; padding: 0; margin: 6px 0 0; color: var(--sub); font-size: .78rem; }
 .feed-status .ng { color: #c4453c; }
+
+/* ---------- 昨日の振り返り ---------- */
+.changes.yesterday { border-left-color: var(--accent); }
+.changes.yesterday .changes-head { color: var(--accent); }
+.changes-note { margin: 2px 0 2px; color: var(--sub); font-size: .78rem; }
+.changes-note strong { color: var(--text); font-weight: 600; }
+.changes-actions { gap: 8px; align-items: center; }
+.changes-link {
+  border: 0; background: none; padding: 5px 4px; margin-right: auto;
+  color: var(--link); font-size: .8rem; cursor: pointer;
+}
+.changes-link:hover { text-decoration: underline; }

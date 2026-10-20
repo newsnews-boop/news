@@ -409,6 +409,8 @@ const CHANGES_NEW = 8;   // 「新しい話題」を最初に表示する件数
 const CHANGES_GREW = 5;  // 「大きくなった話題」の最大件数
 const GREW_BY = 2;       // 何社以上増えたら「大きくなった」とするか
 let changesExpanded = false;
+// その日最初に開いたときは「昨日の振り返り」を出す（「前回から」ボックスのボタンでも開ける）
+let showYesterday = new Date(visit.previous).toDateString() !== new Date(visit.current).toDateString();
 
 // 今の状態（記事ごとに、その話題を何社が報じていたか）を記録する
 function saveSnapshot() {
@@ -429,6 +431,10 @@ function hhmm(t) {
 }
 
 function renderChanges(clusters) {
+  if (showYesterday) {
+    const y = renderYesterday();
+    if (y) return y;
+  }
   const base = load(STORE.snapPrev, null);
   if (!base || !base.cov) return null;  // 初めて開いたときは比べる相手がない
   if (Number(loadString(STORE.changesClosed)) === visit.current) return null;
@@ -452,7 +458,7 @@ function renderChanges(clusters) {
   const head = el("h2", { class: "changes-head" }, `前回（${hhmm(base.seenAt)}）から`);
   if (!fresh.length && !grew.length) {
     return el("section", { class: "changes quiet" }, head,
-      el("p", { class: "changes-none" }, "大きな変化はありません"));
+      el("p", { class: "changes-none" }, "大きな変化はありません"), changesActions());
   }
   const shown = changesExpanded ? fresh : fresh.slice(0, CHANGES_NEW);
   return el("section", { class: "changes", "aria-label": "前回からの変化" },
@@ -466,9 +472,39 @@ function renderChanges(clusters) {
     grew.length ? el("h3", { class: "changes-sub" }, "大きくなった話題") : null,
     grew.length ? el("ol", { class: "topic-list" }, ...grew.map(({ c, from }) =>
       renderTopicItem(c, el("span", { class: "grew" }, `${from}社→${c.coverage}社`)))) : null,
-    el("div", { class: "changes-actions" }, el("button", {
+    changesActions());
+}
+
+function changesActions() {
+  const hasYesterday = (data.yesterday?.items || []).length > 0;
+  return el("div", { class: "changes-actions" },
+    hasYesterday ? el("button", {
+      class: "changes-link", type: "button",
+      onclick: () => { showYesterday = true; render(); },
+    }, "昨日の振り返りを見る") : null,
+    el("button", {
       class: "changes-close", type: "button",
       onclick: () => { save(STORE.changesClosed, String(visit.current)); render(); },
+    }, "確認したので閉じる"));
+}
+
+// 昨日の主な出来事（最も多くの媒体が報じた話題を上から）
+function renderYesterday() {
+  const y = data.yesterday;
+  const items = collect(y?.items || [], { hidden: 0 });
+  if (!items.length) return null;
+  const d = new Date(`${y.date}T00:00:00+09:00`);
+  const label = `${d.getMonth() + 1}/${d.getDate()}（${"日月火水木金土"[d.getDay()]}）`;
+  const done = items.filter(isReadCluster).length;
+  return el("section", { class: "changes yesterday", "aria-label": "昨日の振り返り" },
+    el("h2", { class: "changes-head" }, `昨日 ${label} の主な出来事`),
+    el("p", { class: "changes-note" },
+      `記録した${y.count}件の話題から、多くの媒体が報じた順に${items.length}本 ・ `,
+      el("strong", {}, `${items.length}本中${done}本を確認済み`)),
+    el("ol", { class: "topic-list" }, ...items.map((c) => renderTopicItem(c))),
+    el("div", { class: "changes-actions" }, el("button", {
+      class: "changes-close", type: "button",
+      onclick: () => { showYesterday = false; render(); },
     }, "確認したので閉じる")));
 }
 
