@@ -10,6 +10,7 @@ const STREAM_PAGE = 30;       // ニュース一覧を一度に表示する件�
 const STORE = {
   prefs: "news.prefs", read: "news.read", visit: "news.visit",
   dismissed: "news.dismissed", tab: "news.tab",
+  snapPrev: "news.snap.prev", snapCur: "news.snap.cur", changesClosed: "news.changes.closed",
 };
 
 let data = null;
@@ -46,7 +47,14 @@ function save(key, value) {
 function trackVisit() {
   const now = Date.now();
   const v = load(STORE.visit, { previous: 0, current: 0 });
-  if (now - v.current > 30 * 60 * 1000) v.previous = v.current || now;
+  if (now - v.current > 30 * 60 * 1000) {
+    v.previous = v.current || now;
+    // 直前に見ていた状態を「前回」として固定する（「前回から」ボックスの比較の基準）
+    try {
+      const cur = localStorage.getItem(STORE.snapCur);
+      if (cur) localStorage.setItem(STORE.snapPrev, cur);
+    } catch { /* 記録できなくても表示は続ける */ }
+  }
   v.current = now;
   save(STORE.visit, v);
   return v;
@@ -179,7 +187,7 @@ function topicTabs(counter) {
 }
 
 // 見出し1行。押すとその場で概要などが開く
-function renderTopicItem(c) {
+function renderTopicItem(c, extra = null) {
   const li = el("li", { class: "item" });
   const refresh = () => {
     li.classList.toggle("read", isReadCluster(c));
@@ -197,7 +205,7 @@ function renderTopicItem(c) {
       head.setAttribute("aria-expanded", String(open));
       li.classList.toggle("open", open);
     },
-  }, c.headline, el("span", { class: "new-badge" }, "NEW"), paywallMark(c));
+  }, c.headline, el("span", { class: "new-badge" }, "NEW"), paywallMark(c), extra);
 
   li.append(el("div", { class: "item-main" }, head, coverageBar(c.coverage)), detail);
   refresh();
@@ -254,7 +262,7 @@ function renderTopics(counter) {
       },
     }, t.name)));
 
-  const list = el("ol", { class: "topic-list" }, ...shown.map(renderTopicItem));
+  const list = el("ol", { class: "topic-list" }, ...shown.map((c) => renderTopicItem(c)));
   if (!shown.length) list.append(el("li", { class: "empty" }, "表示できる記事がありません"));
 
   const more = current.items.length > showN ? el("button", {
@@ -364,17 +372,24 @@ function renderCard(c) {
   return card;
 }
 
-function renderStream(counter, exclude) {
-  const seen = new Set(exclude);
+// 全ジャンルの話題（重複なし）。非表示・消した話題は除く
+function allClusters() {
+  const seen = new Set();
   const all = [];
   for (const s of data.sections) {
-    for (const c of collect(s.items, counter)) {
+    for (const c of collect(s.items, { hidden: 0 })) {
       if (!seen.has(c.key)) {
         seen.add(c.key);
         all.push(c);
       }
     }
   }
+  return all;
+}
+
+function renderStream(clusters, exclude) {
+  const skip = new Set(exclude);
+  const all = clusters.filter((c) => !skip.has(c.key));
   all.sort((a, b) => new Date(b.time) - new Date(a.time));
 
   const grid = el("div", { class: "cards" }, ...all.slice(0, streamLimit).map(renderCard));
@@ -388,6 +403,75 @@ function renderStream(counter, exclude) {
     }, `さらに表示（残り${rest}件）`) : null);
 }
 
+// ---------------------------------------------------------------- 前回から
+
+const CHANGES_NEW = 8;   // 「新しい話題」を最初に表示する件数
+const CHANGES_GREW = 5;  // 「大きくなった話題」の最大件数
+const GREW_BY = 2;       // 何社以上増えたら「大きくなった」とするか
+let changesExpanded = false;
+
+// 今の状態（記事ごとに、その話題を何社が報じていたか）を記録する
+function saveSnapshot() {
+  const cov = {};
+  for (const s of data.sections) {
+    for (const i of s.items) {
+      const n = new Set([i, ...i.related].map((m) => m.source)).size;
+      for (const m of [i, ...i.related]) cov[m.id] = Math.max(cov[m.id] || 0, n);
+    }
+  }
+  save(STORE.snapCur, { seenAt: Date.now(), generatedAt: data.generated_at, cov });
+}
+
+function hhmm(t) {
+  const d = new Date(t);
+  const today = new Date().toDateString() === d.toDateString();
+  return `${today ? "" : `${d.getMonth() + 1}/${d.getDate()} `}${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderChanges(clusters) {
+  const base = load(STORE.snapPrev, null);
+  if (!base || !base.cov) return null;  // 初めて開いたときは比べる相手がない
+  if (Number(loadString(STORE.changesClosed)) === visit.current) return null;
+
+  // 前回、この話題を何社が報じていたか（前回なかった話題は undefined）
+  const before = (c) => {
+    const known = c.members.map((m) => base.cov[m.id]).filter((n) => n !== undefined);
+    return known.length ? Math.max(...known) : undefined;
+  };
+  // 前回の取得時刻より少し前までに出た記事は、ランキングの入れ替わりで新しく載っただけなので除く
+  const since = new Date(base.generatedAt || base.seenAt).getTime() - 10 * 60 * 1000;
+  const fresh = clusters
+    .filter((c) => before(c) === undefined && new Date(c.time).getTime() > since)
+    .sort((a, b) => b.coverage - a.coverage || new Date(b.time) - new Date(a.time));
+  const grew = clusters
+    .map((c) => ({ c, from: before(c) }))
+    .filter(({ c, from }) => from !== undefined && c.coverage - from >= GREW_BY)
+    .sort((a, b) => (b.c.coverage - b.from) - (a.c.coverage - a.from))
+    .slice(0, CHANGES_GREW);
+
+  const head = el("h2", { class: "changes-head" }, `前回（${hhmm(base.seenAt)}）から`);
+  if (!fresh.length && !grew.length) {
+    return el("section", { class: "changes quiet" }, head,
+      el("p", { class: "changes-none" }, "大きな変化はありません"));
+  }
+  const shown = changesExpanded ? fresh : fresh.slice(0, CHANGES_NEW);
+  return el("section", { class: "changes", "aria-label": "前回からの変化" },
+    head,
+    fresh.length ? el("h3", { class: "changes-sub" }, `新しい話題 ${fresh.length}件`) : null,
+    fresh.length ? el("ol", { class: "topic-list" }, ...shown.map((c) => renderTopicItem(c))) : null,
+    fresh.length > CHANGES_NEW ? el("button", {
+      class: "show-more", type: "button",
+      onclick: () => { changesExpanded = !changesExpanded; render(); },
+    }, changesExpanded ? "閉じる" : `もっと見る（${fresh.length - CHANGES_NEW}件）`) : null,
+    grew.length ? el("h3", { class: "changes-sub" }, "大きくなった話題") : null,
+    grew.length ? el("ol", { class: "topic-list" }, ...grew.map(({ c, from }) =>
+      renderTopicItem(c, el("span", { class: "grew" }, `${from}社→${c.coverage}社`)))) : null,
+    el("div", { class: "changes-actions" }, el("button", {
+      class: "changes-close", type: "button",
+      onclick: () => { save(STORE.changesClosed, String(visit.current)); render(); },
+    }, "確認したので閉じる")));
+}
+
 // ---------------------------------------------------------------- 全体
 
 function render() {
@@ -396,10 +480,12 @@ function render() {
   const counter = { hidden: 0 };
   stopPreview();  // 描き直すと再生ボタンが作り直されるので、試聴は止める
   const topics = renderTopics(counter);
+  const clusters = allClusters();
   // 主要タブの話題は一覧に重ねて出さない
-  const stream = renderStream({ hidden: 0 }, data.hot || []);
-  main.replaceChildren(...[topics, renderRankings(), stream].filter(Boolean));
+  const stream = renderStream(clusters, data.hot || []);
+  main.replaceChildren(...[renderChanges(clusters), topics, renderRankings(), stream].filter(Boolean));
   window.scrollTo(0, scrollY);
+  saveSnapshot();
 
   const f = data.filtered || {};
   document.getElementById("footer-note").textContent =

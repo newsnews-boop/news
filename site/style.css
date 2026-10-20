@@ -70,6 +70,27 @@ button { font: inherit; color: inherit; }
 .bar i.on { background: var(--accent); }
 .read .bar i.on { background: var(--read); }
 
+/* ---------- 前回から ---------- */
+.changes {
+  background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--new);
+  border-radius: 12px; padding: 10px 16px 6px;
+}
+.changes.quiet { padding-bottom: 10px; }
+.changes-head { font-size: .95rem; margin: 0; color: var(--new); }
+.changes-none { margin: 2px 0 0; color: var(--sub); font-size: .85rem; }
+.changes-sub { font-size: .78rem; color: var(--sub); margin: 8px 0 0; font-weight: 600; }
+.grew {
+  display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px;
+  font-size: .68rem; font-weight: 700; line-height: 1.6; vertical-align: 1px;
+  color: var(--surface); background: var(--new);
+}
+.changes-actions { display: flex; justify-content: flex-end; }
+.changes-close {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 999px;
+  padding: 5px 14px; margin: 4px 0 6px; font-size: .8rem; cursor: pointer; color: var(--sub);
+}
+.changes-close:hover { color: var(--text); }
+
 /* ---------- トピックス（タブ） ---------- */
 .topics {
   background: var(--surface);
