@@ -152,6 +152,12 @@ function thumb(src, cls) {
   });
 }
 
+// ニュースを取得した時刻（例：10/20 12:22）
+function updatedAt() {
+  const t = new Date(data.generated_at);
+  return `${t.getMonth() + 1}/${t.getDate()} ${pad(t.getHours())}:${pad(t.getMinutes())}`;
+}
+
 const metaText = (c) => `${c.source} · ${relTime(c.time)}`;
 
 // 有料記事の可能性が高いものに付ける印
@@ -256,12 +262,11 @@ function renderTopics(counter) {
     onclick: () => { topicsExpanded = !topicsExpanded; render(); },
   }, topicsExpanded ? "閉じる" : `もっと見る（${current.items.length - showN}件）`) : null;
 
-  const gen = new Date(data.generated_at);
   return el("section", { class: "topics", "aria-label": "トピックス" },
     tabBar,
     el("div", { class: "topic-body" },
       el("div", { class: "topic-main" },
-        el("p", { class: "updated" }, `${gen.getMonth() + 1}/${gen.getDate()} ${pad(gen.getHours())}:${pad(gen.getMinutes())} 更新`),
+        el("p", { class: "updated" }, `${updatedAt()} 更新`),
         list, more),
       renderTopicPhoto(shown.slice(0, showN))));
 }
@@ -400,6 +405,8 @@ function render() {
   document.getElementById("footer-note").textContent =
     `共通フィルタで除外：NG媒体 ${f.ng_source ?? 0}件・NGワード ${f.ng_word ?? 0}件` +
     ` ／ この端末の設定で非表示：${counter.hidden}件`;
+  document.getElementById("footer-version").textContent =
+    `版 v${APP_VERSION || "?"} ・ ニュース更新 ${updatedAt()}`;
   renderFeedStatus();
 }
 
