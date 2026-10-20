@@ -117,6 +117,13 @@ button { font: inherit; color: inherit; }
   color: var(--new); border: 1px solid var(--new);
 }
 
+/* 有料記事の印 */
+.paywall {
+  display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px;
+  font-size: .62rem; font-weight: 700; line-height: 1.6; vertical-align: 1px;
+  color: var(--sub); border: 1px solid var(--line); background: var(--bg);
+}
+
 /* 見出しを押すと開く部分 */
 .detail {
   margin: 0 0 10px 14px; padding: 10px 12px; font-size: .88rem;

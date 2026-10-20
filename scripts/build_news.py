@@ -158,6 +158,11 @@ def similar(a, b, threshold):
     return shared >= 4 and shared / min(len(a), len(b)) >= threshold
 
 
+def clean_headline(title):
+    """一覧用の見出し。先頭の【速報】などを外す。"""
+    return re.sub(r"^【[^】]{1,10}】\s*", "", title) or title
+
+
 def article_id(url):
     return hashlib.sha1(url.encode()).hexdigest()[:12]
 
@@ -230,10 +235,16 @@ def fetch_text(url, limit=400_000):
 META_TAG = re.compile(r"<meta\s[^>]*>", re.I)
 
 
+FREE_MARK = re.compile(r'"isAccessibleForFree"\s*:\s*"?(true|false)', re.I)
+
+
 def page_meta(url):
-    """記事ページの紹介文（og:description）と画像（og:image）を取り出す。"""
+    """記事ページの紹介文（og:description）・画像（og:image）・無料かどうかを取り出す。
+    無料かどうかは、検索エンジン向けの印 isAccessibleForFree があるときだけ分かる（なければ None）。"""
     meta = {}
-    for tag in META_TAG.findall(fetch_text(url)):
+    page = fetch_text(url)
+    free = FREE_MARK.search(page)
+    for tag in META_TAG.findall(page):
         name = re.search(r'(?:property|name)=["\']([^"\']+)', tag)
         content = re.search(r'content=["\']([^"\']*)', tag)
         if name and content:
@@ -241,7 +252,8 @@ def page_meta(url):
     desc = clean_text(meta.get("og:description") or meta.get("description") or "")
     image = meta.get("og:image") or meta.get("twitter:image") or ""
     image = urllib.parse.urljoin(url, image) if image else ""
-    return {"d": desc, "i": image if image.startswith("https://") else ""}
+    return {"d": desc, "i": image if image.startswith("https://") else "",
+            "f": free.group(1).lower() == "true" if free else None}
 
 
 def shorten(text, n=120):
@@ -252,7 +264,14 @@ def shorten(text, n=120):
 GOOGLE_BUDGET = 40  # 1回の更新で新たに調べる件数（多いとGoogleに制限される）
 
 
-def enrich(items, cache, ng_words):
+def is_paywalled(m, paywall_sources):
+    """有料記事かどうか。記事ページの印があればそれに従い、なければ媒体で判断する。"""
+    if m.get("free") is not None:
+        return not m["free"]
+    return source_matches(m, paywall_sources)
+
+
+def enrich(items, cache, ng_words, paywall_sources=()):
     # 1) Googleニュースの記事は元記事のURLに置き換える。
     #    制限されないよう1件ずつ間をあけ、断られたらその回は打ち切る（調べた分は次回に引き継ぐ）
     budget = GOOGLE_BUDGET
@@ -290,6 +309,7 @@ def enrich(items, cache, ng_words):
         meta = cache.get(key)
         m["summary"] = m["summary"] or meta["d"]
         m["image"] = meta["i"]
+        m["free"] = meta.get("f")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
         list(pool.map(fetch_meta, leads + others))
@@ -304,10 +324,26 @@ def enrich(items, cache, ng_words):
     unique = lambda v: v and len(seen[v]) == 1  # noqa: E731
 
     for i in items:
-        lead, *related = i.pop("_members")
+        members = i.pop("_members")
+        for m in members:
+            m["paywall"] = is_paywalled(m, paywall_sources)
+        # 代表記事が有料で、同じ話題を無料で読める記事があれば、そちらを代表（開くリンク）にする
+        if members[0]["paywall"]:
+            free = next((m for m in members[1:] if not m["paywall"]), None)
+            if free:
+                members.remove(free)
+                members.insert(0, free)
+                if not i.pop("_short"):
+                    i["headline"] = clean_headline(free["title"])
+                i.update(title=free["title"], source=free["source"], time=free["date"].isoformat())
+        i.pop("_short", None)
+        lead, *related = members
         i["url"] = lead["url"]
-        for r, m in zip(i["related"], related):
-            r["url"] = m["url"]
+        i["paywall"] = lead["paywall"]
+        i["related"] = [{
+            "title": m["title"], "url": m["url"], "id": article_id(m["_orig_url"]),
+            "source": m["source"], "time": m["date"].isoformat(), "paywall": m["paywall"],
+        } for m in related]
         summaries = [m["summary"] for m in (lead, *related) if unique(m["summary"])]
         i["summary"] = shorten(next((s for s in summaries if not match_word(s, ng_words)), ""))
         i["image"] = next((m["image"] for m in (lead, *related) if unique(m["image"])), "")
@@ -442,6 +478,7 @@ def main():
                 a["short_title"] = feed.get("short_title", False)
                 a["always_show"] = feed.get("always_show", False)
                 a["grams"] = bigrams(a["title"])
+                a["_orig_url"] = a["url"]  # 既読管理の id は元のURLから作る（Google経由のURLを置き換えても変わらない）
                 articles.append(a)
 
     # 同じ出来事の記事をまとめる（上のジャンル・優先度の高い媒体から順に処理）
@@ -473,13 +510,13 @@ def main():
         score = coverage * 4 + boost - hours
         # 「いまの話題」用：媒体数をより重視し、主要ニュースに選ばれた話題を加点
         hot = coverage * 3 + boost + (3 if c[0]["section"] == 0 else 0) - hours * 0.5
-        short = next((m["title"] for m in c if m["short_title"]), lead["title"])
-        short = re.sub(r"^【[^】]{1,10}】\s*", "", short) or short  # 一覧では【速報】等を外す
+        short = next((m["title"] for m in c if m["short_title"]), None)
         out_sections[lead["section"]]["items"].append({
             "score": score,
             "_hot": hot if hours <= 18 else None,
             "_always": any(m["always_show"] for m in c),
-            "headline": short,
+            "headline": clean_headline(short or lead["title"]),
+            "_short": short is not None,
             "coverage": coverage,
             "title": lead["title"],
             "url": lead["url"],
@@ -499,10 +536,21 @@ def main():
         # 上限件数まで＋ always_show の情報源の記事は必ず残す
         s["items"] = s["items"][:per_section] + [i for i in s["items"][per_section:] if i["_always"]]
         for i in s["items"]:
-            del i["score"], i["_always"]
+            del i["_always"]
 
     cache = Cache(CACHE)
-    enrich([i for s in out_sections for i in s["items"]], cache, ng_words)
+    enrich([i for s in out_sections for i in s["items"]], cache, ng_words,
+           cfg.get("filter", {}).get("paywall_sources", []))
+
+    # 無料で読める記事がなく有料記事しかない話題は、順位を少し下げる（有料かどうかは enrich で判明）
+    penalty = settings.get("paywall_penalty", 8)
+    for s in out_sections:
+        for i in s["items"]:
+            if i["paywall"]:
+                i["score"] -= penalty
+        s["items"].sort(key=lambda i: -i["score"])
+        for i in s["items"]:
+            del i["score"]
     rankings = load_rankings(cfg, cache)
     cache.save()
 

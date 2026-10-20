@@ -154,6 +154,9 @@ function thumb(src, cls) {
 
 const metaText = (c) => `${c.source} · ${relTime(c.time)}`;
 
+// 有料記事の可能性が高いものに付ける印
+const paywallMark = (a) => (a.paywall ? el("span", { class: "paywall", title: "有料記事の可能性があります" }, "有料") : null);
+
 // ---------------------------------------------------------------- トピックス（タブ）
 
 function topicTabs(counter) {
@@ -188,7 +191,7 @@ function renderTopicItem(c) {
       head.setAttribute("aria-expanded", String(open));
       li.classList.toggle("open", open);
     },
-  }, c.headline, el("span", { class: "new-badge" }, "NEW"));
+  }, c.headline, el("span", { class: "new-badge" }, "NEW"), paywallMark(c));
 
   li.append(el("div", { class: "item-main" }, head, coverageBar(c.coverage)), detail);
   refresh();
@@ -202,12 +205,13 @@ function fillDetail(detail, c, refresh) {
       el("div", { class: "detail-body" },
         c.headline !== c.title ? el("p", { class: "full-title" }, c.title) : null,
         c.summary ? el("p", { class: "summary" }, c.summary) : null,
-        el("p", { class: "meta" }, metaText(c), c.coverage >= 2 ? ` · ${c.coverage}社が報道` : "")),
+        el("p", { class: "meta" }, metaText(c), c.coverage >= 2 ? ` · ${c.coverage}社が報道` : "", paywallMark(c))),
       thumb(c.image, "detail-img")),
     articleLink(c, "read-btn", refresh, "記事を読む →"));
   if (c.related.length) {
     detail.append(el("ul", { class: "related" }, ...c.related.map((r) =>
-      el("li", { "data-id": r.id }, el("span", { class: "src" }, r.source), articleLink(r, "", refresh)))));
+      el("li", { "data-id": r.id }, el("span", { class: "src" }, r.source), articleLink(r, "", refresh),
+        paywallMark(r)))));
   }
   detail.append(el("div", { class: "mute-row" }, "この媒体を非表示：",
     ...sources.map((s) => el("button", { type: "button", onclick: () => muteSource(s) }, s))));
@@ -222,7 +226,7 @@ function renderTopicPhoto(items) {
   fig.append(articleLink(c, "topic-photo-link", refresh,
     thumb(c.image, "topic-photo-img"),
     el("figcaption", {}, el("span", { class: "topic-photo-title" }, c.headline),
-      el("span", { class: "meta" }, metaText(c)))));
+      el("span", { class: "meta" }, metaText(c), paywallMark(c)))));
   refresh();
   return fig;
 }
@@ -346,7 +350,7 @@ function renderCard(c) {
       img, summary,
       el("span", { class: "card-text" },
         el("span", { class: "card-title" }, c.headline),
-        el("span", { class: "meta" }, coverageBar(c.coverage), ` ${metaText(c)}`))),
+        el("span", { class: "meta" }, coverageBar(c.coverage), ` ${metaText(c)}`, paywallMark(c)))),
     el("button", {
       class: "dismiss", type: "button", "aria-label": "この記事を消す", title: "この記事を消す",
       onclick: () => dismiss(c, card),
