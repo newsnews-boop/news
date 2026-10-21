@@ -180,9 +180,13 @@ function topicTabs(counter) {
   const hotIds = new Set(data.hot || []);
   const hotItems = [...(data.hot || []).map((id) => all.get(id)).filter(Boolean),
     ...first.items.filter((i) => !hotIds.has(i.id))];
+  // 「お金」タブ：全ジャンルからお金・投資に関わる話題を集めたもの
+  const moneyItems = (data.money || []).map((id) => all.get(id)).filter(Boolean);
   return [
     { id: first.id, name: first.name, items: collect(hotItems, counter) },
-    ...rest.map((s) => ({ id: s.id, name: s.name, items: collect(s.items, counter) })),
+    ...(moneyItems.length ? [{ id: "money", name: "お金", items: collect(moneyItems, { hidden: 0 }) }] : []),
+    ...rest.filter((s) => s.id !== "money")
+      .map((s) => ({ id: s.id, name: s.name, items: collect(s.items, counter) })),
   ];
 }
 

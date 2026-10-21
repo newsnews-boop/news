@@ -67,6 +67,10 @@ def parse_date(text):
     return d
 
 
+# 見出しの末尾に付くサイトの区分名など（例：「… | | 全国のニュース」「… | ロイター」）
+TITLE_TAIL = re.compile(r"(\s*[|｜]\s*)+(全国のニュース|ロイター|Reuters)\s*$")
+
+
 def clean_text(text):
     text = re.sub(r"<[^>]+>", " ", html.unescape(text or ""))
     return re.sub(r"\s+", " ", text).strip()
@@ -100,6 +104,7 @@ def parse_feed(data, feed):
             if a["title"].endswith(suffix):
                 a["title"] = a["title"][: -len(suffix)]
             a["summary"] = ""  # 中身は関連記事のリンク一覧なので使わない
+        a["title"] = TITLE_TAIL.sub("", a["title"]).strip()
         if a["title"] and a["url"].startswith(("http://", "https://")):
             articles.append(a)
     return articles
@@ -489,6 +494,27 @@ def update_history(items, hot_ids, now):
             "items": [dict(t["item"], coverage=t["peak"]) for t in chosen]}
 
 
+# ---------------------------------------------------------------- お金・投資のニュース
+
+def select_money(sections, cfg, now):
+    """「お金」ジャンルの記事と、見出しにお金・投資に関わる語を含む全ジャンルの話題を集め、
+    新しさと報道社数で並べる。"""
+    money = cfg.get("money", {})
+    words = compile_words(money.get("words", []))
+    picked = []
+    for s in sections:
+        for i in s["items"]:
+            if s["id"] == "money" or (words and (match_word(i["headline"], words) or match_word(i["title"], words))):
+                picked.append(i)
+
+    def score(i):
+        hours = (now - dt.datetime.fromisoformat(i["time"])).total_seconds() / 3600
+        coverage = len({i["source"], *(r["source"] for r in i["related"])})
+        return coverage * 2 - hours - (4 if i["paywall"] else 0)  # 投資の判断に使うので新しさを重視
+
+    return [i["id"] for i in sorted(picked, key=score, reverse=True)[:money.get("count", 12)]]
+
+
 # ---------------------------------------------------------------- メイン
 
 def main():
@@ -623,6 +649,7 @@ def main():
             del i["_hot"]
 
     yesterday = update_history([i for s in out_sections for i in s["items"]], set(hot), now)
+    money = select_money(out_sections, cfg, now)
 
     total = sum(len(s["items"]) for s in out_sections)
     if total == 0:
@@ -639,6 +666,7 @@ def main():
         "show_per_section": settings.get("show_per_section", 8),
         "hot": hot,  # 主要トピックスに出す記事の id（上から順に）
         "yesterday": yesterday,  # 昨日（日本時間）の主な出来事
+        "money": money,  # お金・投資のニュースの id（上から順に）
         "sections": out_sections,
         "rankings": rankings,
         "feeds": feed_status,
